@@ -1,7 +1,7 @@
 .env
 __pycache__/
 *.pyc
-config/open_numbers*.txt
-config/close_numbers*.txt
-!config/open_numbers.example.txt
-!config/close_numbers.example.txt
+gh_issues/config/open_numbers*.txt
+gh_issues/config/close_numbers*.txt
+!gh_issues/config/open_numbers.example.txt
+!gh_issues/config/close_numbers.example.txt
