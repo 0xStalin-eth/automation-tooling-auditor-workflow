@@ -23,7 +23,7 @@ echo "→ Pointing .git at .bare"
 echo "gitdir: ./.bare" > .git
 
 echo "→ Fixing fetch refspec so remote tracking behaves like a normal clone"
-git config --unset-all remote.origin.fetch
+git config --unset-all remote.origin.fetch 2>/dev/null || true
 git config --add remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
 
 echo "→ Fetching origin"
