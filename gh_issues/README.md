@@ -2,14 +2,14 @@
 
 Python scripts to bulk open and close GitHub issues by issue number.
 
+Auth is delegated to the [GitHub CLI](https://cli.github.com/) (`gh`), which stores your token in the OS keyring — no `GITHUB_TOKEN` file needed.
+
 ## Structure
 
 ```
 gh_issues/
 ├── README.md
-├── requirements.txt
-├── .env.example
-├── .env                              # your local config (gitignored)
+├── .env                              # per-project GITHUB_REPO (gitignored, optional)
 ├── scripts/
 │   ├── open_issues.py
 │   └── close_issues.py
@@ -22,51 +22,34 @@ gh_issues/
 
 ## Requirements
 
-- Python 3
-- A GitHub [classic personal access token](https://github.com/settings/tokens) with the `repo` scope (or `public_repo` for public repos)
-
-### Organization-owned repos
-
-If the repo belongs to a GitHub organization (e.g. `github.com/my-org/repo`) you need a **fine-grained personal access token** with access explicitly requested for that specific repo:
-
-1. Go to [github.com/settings/tokens](https://github.com/settings/tokens) → **Fine-grained tokens** → Generate new token.
-2. Under **Resource owner** select the organization.
-3. Under **Repository access** choose the specific repo.
-4. Under **Permissions** set:
-   - **Issues** → Read and Write
-   - **Metadata** → Read (required by GitHub for any repo-scoped token)
-5. Submit the request — the org owner must approve it before the token becomes usable.
-
-> **Note:** Classic PATs with `repo` scope may still be rejected with `401 Bad credentials` on org repos that enforce stricter token policies. Prefer fine-grained tokens for org repos.
+- Python 3 (stdlib only — no third-party packages)
+- [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
 
 ## Setup
 
-**1. Install dependencies:**
+**1. Install and authenticate `gh`:**
 ```bash
-pip install -r gh_issues/requirements.txt
+brew install gh          # macOS; see https://cli.github.com for other platforms
+gh auth login            # store the token in the OS keyring
+gh auth status           # verify you're logged in
 ```
 
-**2. Configure environment:**
+For repos owned by a GitHub **organization**, make sure your `gh` login has access to that org (`gh auth refresh -s repo` if the token lacks scopes, or authorize the org under your GitHub SSO settings).
 
-- **`.env` file** (recommended for per-project config):
-```bash
-cp gh_issues/.env.example gh_issues/.env
-```
-Edit `gh_issues/.env`:
-```
-GITHUB_TOKEN=ghp_your_classic_token_here
-GITHUB_REPO=https://github.com/owner/repo
-```
+**2. Point the scripts at a repo.** Pick one:
 
-- **Shell profile** (sets them globally for all projects): add the following to your `~/.zshrc`, `~/.bashrc`, or `~/.zshenv`:
-```bash
-export GITHUB_TOKEN=ghp_your_classic_token_here
-export GITHUB_REPO=https://github.com/owner/repo
-```
-Then reload it:
-```bash
-source ~/.zshrc    # or ~/.bashrc or ~/.zshenv
-```
+- **Per-project (recommended for one-off audits)** — create `gh_issues/.env`:
+  ```
+  GITHUB_REPO=https://github.com/owner/repo
+  ```
+  The scripts auto-load this file. `.env` is gitignored.
+
+- **Shell-wide** — export it once for all projects:
+  ```bash
+  export GITHUB_REPO=https://github.com/owner/repo
+  ```
+
+- **Inline** — pass the repo URL as the last CLI arg on every run (see Usage).
 
 **3. Prepare your issue number files:**
 ```bash

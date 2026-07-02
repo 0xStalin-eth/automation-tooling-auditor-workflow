@@ -1,13 +1,23 @@
+import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
-import requests
-from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent.parent / ".env", override=True)
+def load_env_file(path):
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
 
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+
+load_env_file(Path(__file__).parent.parent / ".env")
+
 GITHUB_REPO = os.getenv("GITHUB_REPO")  # "owner/repo" or full GitHub URL
 
 
@@ -39,36 +49,31 @@ def main():
             numbers = [int(line.strip()) for line in f if line.strip()]
         repo = parse_repo(args[1] if len(args) > 1 else GITHUB_REPO)
 
-    if not GITHUB_TOKEN:
-        print("Error: GITHUB_TOKEN is not set.")
-        sys.exit(1)
-
     if not repo:
-        print("Error: repo not provided. Pass it as argument or set GITHUB_REPO in .env")
+        print("Error: repo not provided. Pass it as argument, set GITHUB_REPO in gh_issues/.env, or export it in your shell")
         sys.exit(1)
-
-    session = requests.Session()
-    session.headers.update(
-        {
-            "Authorization": f"token {GITHUB_TOKEN}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
-    )
 
     opened = 0
     failed = 0
 
     for number in numbers:
-        url = f"https://api.github.com/repos/{repo}/issues/{number}"
-        resp = session.patch(url, json={"state": "open"})
-        if resp.status_code == 200:
-            data = resp.json()
+        result = subprocess.run(
+            [
+                "gh", "api",
+                "--method", "PATCH",
+                f"/repos/{repo}/issues/{number}",
+                "-f", "state=open",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
             print(f"[OK]   #{data['number']} reopened — {data['title']}")
             opened += 1
         else:
-            msg = resp.json().get("message", resp.text)
-            print(f"[FAIL] #{number}: {resp.status_code} {msg}")
+            msg = (result.stderr or result.stdout).strip()
+            print(f"[FAIL] #{number}: {msg}")
             failed += 1
 
     print(f"\nDone. Opened: {opened}  Failed: {failed}")
