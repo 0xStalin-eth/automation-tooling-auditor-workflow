@@ -28,7 +28,7 @@ mitigation-review-single <client_repo_url> <fix_commit_hash>
 
 Example (the URL is the client repo, the hash is the commit the fixes go up to):
 ```bash
-mitigation-review-single https://github.com/Lotus-Protocol/lotus.git 218dcec157c6cad5dd3431c8e0455168ac593401
+mitigation-review-single https://github.com/client-org/protocol.git 3f9c2a1b7e4d5c6a8b9f0e1d2c3b4a5f6e7d8c9b
 ```
 
 | Option | Description |
