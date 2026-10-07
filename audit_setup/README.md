@@ -43,41 +43,12 @@ setup-audit git@github.com:client/protocol.git
 
 ## Pulling mitigations from the client's external repo
 
-Scenario: `origin/main` is at the audit commit, and the client has pushed their fixes to a separate branch (e.g. `fixes/audit-round-1`) on their own repo, ahead of `main`. Goal is to land those fixes on your local `audit-fixes` branch and push them to `origin` for the mitigation review.
-
-### One-time: register the external repo
-
-From the engagement root (where `.git` points to `.bare`):
-```bash
-git remote add external <client-repo-url>
-git fetch external
-```
-
-The external remote's branches now live under `external/*` — no collision with `origin/*`.
-
-### Each time the client pushes new fixes
-
+Use [`mitigation-review-single`](../mitigation_review/single-repo/README.md) from inside `AuditFixes/`:
 ```bash
 cd AuditFixes/
-git fetch external
-
-# Bring the fixes onto audit-fixes.
-# --ff-only: only proceed if audit-fixes can be fast-forwarded to the client's
-# tip (i.e. our tip is a direct ancestor of theirs). Slides the branch pointer
-# forward with no merge commit, so `git diff origin/main..origin/audit-fixes`
-# shows exactly the client's fix commits and nothing else. If the histories
-# have diverged, git aborts instead of silently creating a merge commit —
-# that's a signal to stop and investigate rather than pollute the review diff.
-
-
-git merge --ff-only external/fixes/audit-round-1
+mitigation-review-single <client_repo_url> <fix_commit_hash>
 ```
 
-### Push to origin for review
+It merges the client's fix commits into `audit-fixes` (keeping their original hashes), verifies them, and pushes to `origin`. A fast-forward isn't possible, because `audit-fixes` carries the audit repo's own commits on top of the client's history.
 
-Still inside `AuditFixes/`:
-```bash
-git push -u origin audit-fixes
-```
-
-After the first push, subsequent pushes are just `git push`.
+For audit repos that hold several client repos in their own folders, see [`mitigation-review-multi`](../mitigation_review/multi-repo/README.md).

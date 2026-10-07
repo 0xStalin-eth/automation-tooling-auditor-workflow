@@ -1,0 +1,11 @@
+# One source repo per line, 4 whitespace-separated fields:
+#   <remote_name>  <remote_url>  <exact_folder_name>  <commit_hash>
+#
+# remote_name       -> name for the remote reference
+# remote_url        -> source repo's URL
+# exact_folder_name -> folder the fixes are merged into; must already exist in the audit repo
+# commit_hash       -> commit with the mitigations (full 40-char hash; a short hash only
+#                      works if the commit is on a branch of the source repo)
+
+ess_common       https://github.com/USD-Pi-Protocol/stbl-contracts-evm-ess-common.git    stbl-contracts-evm-ess-common    3f9c2a1b7e4d5c6a8b9f0e1d2c3b4a5f6e7d8c9b
+evm_redemptions  https://github.com/USD-Pi-Protocol/stbl-contracts-evm-redemptions.git   stbl-contracts-evm-redemptions   CHANGE_ME
