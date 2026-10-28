@@ -25,6 +25,15 @@ mkdir my-engagement && cd my-engagement
 setup-audit git@github.com:client/protocol.git
 ```
 
+### As a Claude Code skill
+
+The `/setup-audit` skill (`.claude/skills/setup-audit/`) runs this script after pre-flight checks (fresh directory, required remote branches exist). To make it available from any engagement directory, symlink it into your user skills from this folder (only needed once):
+```bash
+ln -s "$PWD/../.claude/skills/setup-audit" ~/.claude/skills/setup-audit
+```
+
+Then, in Claude Code: `/setup-audit git@github.com:client/protocol.git`
+
 ## What it does
 
 1. Bare-clones the repo into `.bare`
@@ -40,6 +49,7 @@ setup-audit git@github.com:client/protocol.git
 | `Solace/` | `solace` (new, branched from `report`) |
 | `Grimoire/` | `grimoire` (new, branched from `audit/Stalin`) |
 | `AuditFixes/` | `audit-fixes` (new, branched from `main`) — used to pull mitigations from the client's external repo and push them to `origin` |
+| `MITIGATION_REVIEW/` | `mitigation-review` (new, branched from `audit-fixes`) — where the mitigation review is done, so `audit-fixes` stays an untouched copy of the client's fixes |
 
 ## Pulling mitigations from the client's external repo
 
@@ -50,5 +60,7 @@ mitigation-review-single <client_repo_url> <fix_commit_hash>
 ```
 
 It merges the client's fix commits into `audit-fixes` (keeping their original hashes), verifies them, and pushes to `origin`. A fast-forward isn't possible, because `audit-fixes` carries the audit repo's own commits on top of the client's history.
+
+It then merges `audit-fixes` into `mitigation-review` automatically, so `MITIGATION_REVIEW/` always has the latest fixes. Do the review there, and never commit review work to `audit-fixes`.
 
 For audit repos that hold several client repos in their own folders, see [`mitigation-review-multi`](../mitigation_review/multi-repo/README.md).

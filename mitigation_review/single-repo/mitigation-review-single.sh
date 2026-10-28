@@ -8,6 +8,8 @@
 #
 # Merges the client's fix commit into the audit-fixes branch, keeping every client
 # commit with its original hash, verifies the result, then pushes to origin.
+# Finally merges audit-fixes into the mitigation-review branch (MITIGATION_REVIEW/
+# worktree), where the review itself is done.
 #
 # Usage (from inside the AuditFixes/ worktree):
 #   mitigation-review-single [--push] <client_repo_url> <fix_commit_hash>
@@ -17,6 +19,7 @@
 set -euo pipefail
 
 BRANCH="audit-fixes"      # branch the fixes are merged into
+REVIEW_BRANCH="mitigation-review"  # review branch kept in sync with audit-fixes
 REMOTE="client"           # remote name used for the client repo
 KEEP_DELETED=".github/"   # files we deleted under this path stay deleted if the client modified them
 
@@ -28,6 +31,87 @@ usage() {
 die() {
   echo "ERROR: $*" >&2
   exit 1
+}
+
+# Snapshot every uncommitted change in a worktree (tracked and untracked, not
+# ignored) as a commit, without touching its files or its index. Prints the hash.
+snapshot() {
+  local wt="$1" tmp_index tree
+  tmp_index="$(mktemp)"
+  cp "$(git -C "$wt" rev-parse --path-format=absolute --git-path index)" "$tmp_index"
+  GIT_INDEX_FILE="$tmp_index" git -C "$wt" add -A
+  tree="$(GIT_INDEX_FILE="$tmp_index" git -C "$wt" write-tree)"
+  rm -f "$tmp_index"
+  git -C "$wt" commit-tree "$tree" -p HEAD -m "Snapshot of ${wt} before syncing ${REVIEW_BRANCH}"
+}
+
+# Merge audit-fixes into the review branch, in whichever worktree has it checked
+# out. The review work there is usually uncommitted, so it must never be lost:
+# git refuses any merge that would overwrite uncommitted or untracked files, a
+# backup of them is saved first, and they are verified to be unchanged after.
+sync_review() {
+  local review_path
+  review_path="$(git worktree list --porcelain | awk -v ref="branch refs/heads/${REVIEW_BRANCH}" \
+    '/^worktree /{p=substr($0,10)} $0==ref{print p}')"
+
+  echo
+  if [[ -z "$review_path" ]]; then
+    echo "Skipping ${REVIEW_BRANCH} sync: branch is not checked out in any worktree"
+    return 0
+  fi
+  if git -C "$review_path" rev-parse -q --verify MERGE_HEAD >/dev/null; then
+    echo "WARNING: skipping ${REVIEW_BRANCH} sync: a merge is in progress in ${review_path}" >&2
+    return 0
+  fi
+  if git merge-base --is-ancestor "$BRANCH" "$REVIEW_BRANCH"; then
+    echo "OK: ${REVIEW_BRANCH} already has everything in ${BRANCH}"
+    return 0
+  fi
+
+  local before backup="" backup_ref=""
+  before="$(git rev-parse "$REVIEW_BRANCH")"
+  if [[ -n "$(git -C "$review_path" status --porcelain)" ]]; then
+    backup="$(snapshot "$review_path")"
+    backup_ref="refs/${REVIEW_BRANCH}-backups/$(date +%Y%m%d-%H%M%S)"
+    git update-ref "$backup_ref" "$backup"
+    echo "Backed up uncommitted work in ${REVIEW_BRANCH} to ${backup_ref}"
+  fi
+
+  # No review commits: fast-forward. Otherwise: a merge commit on top of them.
+  local merged=true
+  if git merge-base --is-ancestor "$REVIEW_BRANCH" "$BRANCH"; then
+    git -C "$review_path" merge --ff-only "$BRANCH" || merged=false
+  else
+    git -C "$review_path" merge --no-edit -m "Merge ${BRANCH} into ${REVIEW_BRANCH}" "$BRANCH" || merged=false
+  fi
+  if [[ "$merged" != true ]]; then
+    if git -C "$review_path" rev-parse -q --verify MERGE_HEAD >/dev/null; then
+      git -C "$review_path" merge --abort
+    fi
+    echo >&2
+    echo "Sync of ${REVIEW_BRANCH} aborted — ${review_path} is unchanged (still at ${before:0:12})." >&2
+    echo "If git listed files above, the fixes change files you edited there: commit or stash them," >&2
+    echo "then re-run this command with the same fix commit (or: git -C ${review_path} merge ${BRANCH})." >&2
+    exit 1
+  fi
+
+  git merge-base --is-ancestor "$before" "$REVIEW_BRANCH" \
+    || die "${REVIEW_BRANCH} no longer contains ${before:0:12} — recover it with: git -C ${review_path} reset --hard ${before}"
+
+  # Every file that had uncommitted changes must still be exactly as it was.
+  if [[ -n "$backup" ]]; then
+    local after changed=()
+    after="$(snapshot "$review_path")"
+    while IFS= read -r -d '' f; do changed+=("$f"); done \
+      < <(git diff -z --no-renames --name-only "$before" "$backup")
+    if [[ ${#changed[@]} -gt 0 ]] && ! git diff --quiet "$backup" "$after" -- "${changed[@]}"; then
+      echo "ERROR: uncommitted work in ${review_path} changed during the sync:" >&2
+      git diff --stat "$backup" "$after" -- "${changed[@]}" >&2
+      die "restore a file with: git -C ${review_path} checkout ${backup_ref} -- <file>"
+    fi
+    echo "OK: uncommitted work in ${REVIEW_BRANCH} is untouched"
+  fi
+  echo "Synced ${REVIEW_BRANCH}: $(git -C "$review_path" log -1 --format='%h %s')"
 }
 
 push=false
@@ -75,6 +159,7 @@ fix_short="${fix:0:12}"
 
 if git merge-base --is-ancestor "$fix" HEAD; then
   echo "Nothing to do: ${fix_short} is already in ${BRANCH}."
+  sync_review
   exit 0
 fi
 
@@ -159,3 +244,6 @@ if [[ "$push" == true ]]; then
 else
   echo "Not pushed. When ready: git push -u origin ${BRANCH}"
 fi
+
+# --- Phase 6: sync the review branch -------------------------------------------
+sync_review
